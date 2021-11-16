@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import time
 import math
 import random
@@ -22,13 +22,14 @@ from utils.loss import ComputeLoss
 from utils.plots import plot_labels, plot_lr_scheduler
 from utils.metrics import fitness
 from utils.loggers import Loggers
+from utils.loggers.wandb.wandb_utils import check_wandb_resume
 from utils.callbacks import Callbacks
 from utils.autoanchor import check_anchors
 from utils.datasets import create_dataloader
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, intersect_dicts, select_device
 from utils.general import labels_to_class_weights, increment_path, labels_to_image_weights, init_seeds, \
     strip_optimizer, check_dataset, check_img_size, check_requirements, check_file,\
-    check_yaml, check_suffix, one_cycle, colorstr, methods, set_logging
+    check_yaml, check_suffix, one_cycle, colorstr, methods, set_logging, get_latest_run
 
 
 FILE = Path(__file__).resolve()
@@ -66,6 +67,8 @@ def train(hyp,
 
     # Loggers
     loggers = Loggers(save_dir, pretrained_path, args, hyp, LOGGER)
+    if resume:
+        weights, epochs, hyp = args.weights, args.epochs, args.hyp
 
     # Register actions
     for k in methods(loggers):
@@ -385,6 +388,7 @@ def parser(known=False):
     args.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     args.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
     args.add_argument('--name', type=str, help='define your version experience', required=True)
+    args.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     args = args.parse_known_args()[0] if known else args.parse_args()
 
     with open(Path('config') / 'train_cfg.yaml') as f:
@@ -415,11 +419,26 @@ def main(args, callbacks=Callbacks()):
 
     args.save_dir = str(increment_path(Path(args.project) / args.name, exist_ok=args.exist_ok))
 
+    # Resume
+    if args.resume and not check_wandb_resume(args) and not args.evolve:  # resume an interrupted run
+        ckpt = args.resume if isinstance(args.resume, str) else get_latest_run()  # specified or most recent path
+        assert os.path.isfile(ckpt), 'ERROR: --resume checkpoint does not exist'
+        with open(Path(ckpt).parent.parent / 'opt.yaml', errors='ignore') as f:
+            args = argparse.Namespace(**yaml.safe_load(f))  # replace
+        args.cfg, args.weights, args.resume = '', ckpt, True  # reinstate
+        LOGGER.info(f'Resuming training from {ckpt}')
+    else:
+        args.data, args.cfg, args.hyp, args.weights, args.project = \
+            check_file(args.data), check_yaml(args.cfg), check_yaml(args.hyp), str(args.weights), str(args.project)  # checks
+        assert len(args.cfg) or len(args.weights), 'either --cfg or --weights must be specified'
+
+
     # DDP mode
     device = select_device(args.device, batch_size=args.batch_size)
     print(device)
 
-    train(args.hyp, args, device, callbacks)
+    if not args.evolve:
+        train(args.hyp, args, device, callbacks)
 
 
 if __name__ == "__main__":
