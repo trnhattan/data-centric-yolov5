@@ -67,8 +67,6 @@ def train(hyp,
 
     # Loggers
     loggers = Loggers(save_dir, pretrained_path, args, hyp, LOGGER)
-    if resume:
-        weights, epochs, hyp = args.weights, args.epochs, args.hyp
 
     # Register actions
     for k in methods(loggers):
@@ -427,18 +425,12 @@ def main(args, callbacks=Callbacks()):
             args = argparse.Namespace(**yaml.safe_load(f))  # replace
         args.cfg, args.weights, args.resume = '', ckpt, True  # reinstate
         LOGGER.info(f'Resuming training from {ckpt}')
-    else:
-        args.data, args.cfg, args.hyp, args.weights, args.project = \
-            check_file(args.data), check_yaml(args.cfg), check_yaml(args.hyp), str(args.weights), str(args.project)  # checks
-        assert len(args.cfg) or len(args.weights), 'either --cfg or --weights must be specified'
-
 
     # DDP mode
     device = select_device(args.device, batch_size=args.batch_size)
     print(device)
 
-    if not args.evolve:
-        train(args.hyp, args, device, callbacks)
+    train(args.hyp, args, device, callbacks)
 
 
 if __name__ == "__main__":
