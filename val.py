@@ -280,9 +280,9 @@ def parser():
     args.exist_ok = False
     args.half = False
     args.project = 'results/evaluate/' + args.task
-    args.save_conf = False
+    args.save_conf = True
     args.save_hybrid = False
-    args.save_txt = False
+    args.save_txt = True
     args.verbose = False
     args.plots = True
 
